@@ -112,7 +112,7 @@ module APNS
   def self.packaged_notification(device_token, message)
     pt = self.packaged_token(device_token)
     pm = self.packaged_message(message)
-    [0, 0, 32, pt, 0, pm.size, pm].pack("ccca*cca*")
+    [0, 0, 32, pt, 0, pm.bytes.to_a.size, pm].pack("ccca*cca*")
   end
   
   def self.packaged_token(device_token)
