@@ -21,4 +21,4 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 # OTHER DEALINGS IN THE SOFTWARE.
  
-require 'apns/core'
+require File.join(File.dirname(__FILE__), 'apns', 'core')
