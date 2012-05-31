@@ -177,6 +177,7 @@ module APNS
       # openssl pkcs12 -in mycert.p12 -out client-cert.pem -nodes -clcerts -passin pass:password
       @pem = options[:pem] # this should be the content of the pem file
       @pass = options[:pass]
+      @cache_connections = options[:cache_connections]
       @connections = {}
     end
 
