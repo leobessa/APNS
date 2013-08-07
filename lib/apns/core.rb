@@ -25,6 +25,9 @@ require 'openssl'
 require 'json'
 
 module APNS
+
+  class ConnectionError < StandardError; end
+
   module Connection
     def open_connection(host, port)
       context      = OpenSSL::SSL::SSLContext.new
@@ -103,13 +106,13 @@ module APNS
           ssl.close
           sock.close
         end
-      rescue Errno::ECONNABORTED, Errno::EPIPE, Errno::ECONNRESET
+      rescue Errno::EPIPE, Errno::ETIMEDOUT, OpenSSL::SSL::SSLError, IOError => e
         if (retries += 1) < 5
           self.remove_connection(host, port)
           retry
         else
           # too-many retries, re-raise
-          raise
+          raise ConnectionError, "tried #{retries} times to reconnect but failed: #{e.inspect}"
         end
       end
     end
