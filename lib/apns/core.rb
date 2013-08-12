@@ -28,7 +28,7 @@ module APNS
 
   class ConnectionError < StandardError; end
 
-  module Connection
+  module ConnectionManager
     def open_connection(host, port)
       context      = OpenSSL::SSL::SSLContext.new
       context.cert = OpenSSL::X509::Certificate.new(@pem)
@@ -36,10 +36,7 @@ module APNS
 
       retries = 0
       begin
-        sock         = TCPSocket.new(host, port)
-        ssl          = OpenSSL::SSL::SSLSocket.new(sock, context)
-        ssl.connect
-        return ssl, sock
+        return Connection.new(host, port, context)
       rescue SystemCallError
         if (retries += 1) < 5
           sleep 1
@@ -65,9 +62,8 @@ module APNS
 
     def remove_connection(host, port)
       if self.has_connection?(host, port)
-        ssl, sock = @connections.delete([host, port])
-        ssl.close
-        sock.close
+        conn = @connections.delete([host, port])
+        conn.close
       end
     end
 
@@ -83,13 +79,13 @@ module APNS
           self.create_connection(host, port)
         end
 
-        ssl, sock = self.find_connection(host, port)
+        conn = self.find_connection(host, port)
         # If we're closed, reconnect
-        if ssl.closed?
+        if conn.idle_timeout? || conn.closed?
           self.reconnect_connection(host, port)
           self.find_connection(host, port)
         else
-          return [ssl, sock]
+          return conn
         end
       else
         self.open_connection(host, port)
@@ -99,12 +95,11 @@ module APNS
     def with_connection(host, port, &block)
       retries = 0
       begin
-        ssl, sock = self.get_connection(host, port)
-        yield ssl if block_given?
+        conn = self.get_connection(host, port)
+        yield conn if block_given?
 
         unless @cache_connections
-          ssl.close
-          sock.close
+          conn.close
         end
       rescue Errno::EPIPE, Errno::ETIMEDOUT, OpenSSL::SSL::SSLError, IOError => e
         if (retries += 1) < 5
@@ -119,7 +114,7 @@ module APNS
   end
 
   class Feedbacker
-    include Connection
+    include ConnectionManager
     DEFAULT_HOST = 'feedback.sandbox.push.apple.com'
     DEFAULT_PORT = 2196
 
@@ -168,7 +163,7 @@ module APNS
   end
 
   class Pusher
-    include Connection
+    include ConnectionManager
     DEFAULT_HOST = 'gateway.sandbox.push.apple.com'
     DEFAULT_PORT = 2195
 

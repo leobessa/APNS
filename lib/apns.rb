@@ -22,3 +22,4 @@
 # OTHER DEALINGS IN THE SOFTWARE.
  
 require File.join(File.dirname(__FILE__), 'apns', 'core')
+require 'apns/connection'

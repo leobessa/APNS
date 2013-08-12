@@ -1,12 +1,16 @@
 require File.dirname(__FILE__) + '/../spec_helper'
 
 describe APNS::Pusher do
+
+  let(:pem) { File.read('spec/apns/test.pem') }
+  let(:pem_pass) { 'passphrase' }
+
   let(:options) do
     {
         host: 'www.sample.com',
-        pem: 'pem_content',
+        pem: pem,
         port: 443,
-        pass: 'password',
+        pass: pem_pass,
         cache_connections: true
     }
   end
@@ -111,28 +115,61 @@ describe APNS::Pusher do
   context "when cached connections are enabled" do
     before(:each) do
       @pusher = APNS::Pusher.new(options.merge(cache_connections: true))
-      @conn = double('connection', :write => true, :close => true, :closed? => false, :flush => true)
+      @ssl_conn = double('ssl_connection', :write => true, :close => true, :closed? => false, :flush => true, :connect => true)
       @sock = double('socket', :close => true, :closed? => false)
-      @pusher.stub(:open_connection).and_return([@conn,@sock])
+      OpenSSL::SSL::SSLSocket.stub(:new).and_return(@ssl_conn)
+      TCPSocket.stub(:new).and_return(@sock)
     end
     it "uses the same connection multiple times" do
-      @pusher.should_receive(:open_connection).once
+      @pusher.should_receive(:open_connection).once.and_call_original
       3.times { @pusher.send_notification(token, message) }
+    end
+
+
+    context "connections timeout after an idle period" do
+      before(:each) do
+        @start_time = Time.new
+        APNS::Connection.any_instance.stub(:idle_timeout_in_sec).and_return(100)
+        Time.stub(:now).and_return(@start_time)
+      end
+
+      context "after an short inactivity period" do
+        it "uses the same connection" do
+          @pusher.should_receive(:open_connection).once.times.and_call_original
+          @pusher.send_notification(token, message)
+          @pusher.send_notification(token, message)
+          Time.stub(:now).and_return(@start_time + 99)
+          @pusher.send_notification(token, message)
+          @pusher.send_notification(token, message)
+        end
+      end
+
+      context "after an long inactivity period" do
+        it "opens a new connection" do
+          @pusher.should_receive(:open_connection).exactly(2).times.and_call_original
+          @pusher.send_notification(token, message)
+          @pusher.send_notification(token, message)
+          Time.stub(:now).and_return(@start_time + 110)
+          @pusher.send_notification(token, message)
+          Time.stub(:now).and_return(@start_time + 120)
+          @pusher.send_notification(token, message)
+        end
+      end
+
     end
   end
 
   context "when cached connections are disabled" do
     before(:each) do
       @pusher = APNS::Pusher.new(options.merge(cache_connections: false))
-      @conn = double('connection', :write => true, :close => true, :closed? => false, :flush => true)
+      @ssl_conn = double('ssl_connection', :write => true, :close => true, :closed? => false, :flush => true, :connect => true)
       @sock = double('socket', :close => true, :closed? => false)
-      @pusher.stub(:open_connection).and_return([@conn,@sock])
+      OpenSSL::SSL::SSLSocket.stub(:new).and_return(@ssl_conn)
+      TCPSocket.stub(:new).and_return(@sock)
     end
-    it "uses the same connection multiple times" do
-      @pusher.should_receive(:open_connection).exactly(3).times
+    it "opens a new connection each time" do
+      @pusher.should_receive(:open_connection).exactly(3).times.and_call_original
       3.times { @pusher.send_notification(token, message) }
     end
   end
-
-
 end
